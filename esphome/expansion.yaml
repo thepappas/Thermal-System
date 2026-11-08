@@ -1,0 +1,54 @@
+substitutions:
+  # Illustrative ROMs only: replace with the addresses of the installed sensors.
+  core_external_rom: "0xbf00000000000828"
+
+esphome:
+  name: thermal-expansion
+  min_version: 2025.10.3
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+logger:
+
+ota:
+  - platform: esphome
+    password: !secret expansion_ota_password
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+mqtt:
+  broker: !secret mqtt_broker
+  username: !secret expansion_mqtt_username
+  password: !secret expansion_mqtt_password
+  discovery: false
+  log_topic: null
+  topic_prefix: hvac/node/expansion
+  birth_message:
+    topic: hvac/status/expansion
+    payload: online
+    retain: true
+  will_message:
+    topic: hvac/status/expansion
+    payload: offline
+    retain: true
+  shutdown_message:
+    topic: hvac/status/expansion
+    payload: offline
+    retain: true
+
+one_wire:
+  - platform: gpio
+    pin: GPIO4
+
+sensor:
+  - platform: dallas_temp
+    address: ${core_external_rom}
+    name: External core temperature
+    state_topic: hvac/core/temp
+    retain: false
+    update_interval: 30s

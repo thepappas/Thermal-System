@@ -1,0 +1,105 @@
+name: thermal
+
+services:
+  mosquitto:
+    image: docker.io/library/eclipse-mosquitto:2.0.21
+    restart: unless-stopped
+    ports:
+      - "${MQTT_BIND_IP:-127.0.0.1}:1883:1883"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro,Z
+      - ../data/secrets/mosquitto.passwd:/mosquitto/config/passwords:ro,Z
+      - mosquitto-data:/mosquitto/data
+
+  influxdb:
+    image: docker.io/library/influxdb:2.7.11
+    restart: unless-stopped
+    ports:
+      - "${INFLUX_BIND_IP:-127.0.0.1}:8086:8086"
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME_FILE: /run/hvac-secrets/influx-user
+      DOCKER_INFLUXDB_INIT_PASSWORD_FILE: /run/hvac-secrets/influx-password
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN_FILE: /run/hvac-secrets/influx-admin-token
+      DOCKER_INFLUXDB_INIT_ORG: hvac
+      DOCKER_INFLUXDB_INIT_BUCKET: hvac
+    volumes:
+      - influx-data:/var/lib/influxdb2
+      - influx-config:/etc/influxdb2
+      - ../data/secrets/influx-user:/run/hvac-secrets/influx-user:ro,Z
+      - ../data/secrets/influx-password:/run/hvac-secrets/influx-password:ro,Z
+      - ../data/secrets/influx-admin-token:/run/hvac-secrets/influx-admin-token:ro,Z
+
+  nodered:
+    image: docker.io/nodered/node-red:4.0.9
+    restart: unless-stopped
+    depends_on:
+      - mosquitto
+      - influxdb
+    ports:
+      - "${NODERED_BIND_IP:-127.0.0.1}:1880:1880"
+    environment:
+      MQTT_HOST: mosquitto
+      MQTT_PORT: "1883"
+      MQTT_USER: hvac
+      MQTT_USERNAME: hvac
+      INFLUX_URL: http://influxdb:8086
+      INFLUX_ORG: hvac
+      INFLUX_BUCKET: hvac
+      NODE_RED_ADMIN_USER: admin
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        export MQTT_PASSWORD="$$(cat /run/hvac-secrets/mqtt-password)"
+        export INFLUX_TOKEN="$$(cat /run/hvac-secrets/nodered-influx-token)"
+        exec npm start -- --userDir /data
+    volumes:
+      - nodered-data:/data
+      - ../nodered/flows.json:/data/flows.json:ro,Z
+      - ./nodered-credentials.json:/data/flows_cred.json:ro,Z
+      - ./nodered-settings.js:/data/settings.js:ro,Z
+      - ../data/secrets/mqtt-password:/run/hvac-secrets/mqtt-password:ro,Z
+      - ../data/secrets/nodered-influx-token:/run/hvac-secrets/nodered-influx-token:ro,Z
+      - ../data/secrets/nodered-admin-hash:/run/hvac-secrets/nodered-admin-hash:ro,Z
+      - ../data/secrets/nodered-credential-secret:/run/hvac-secrets/nodered-credential-secret:ro,Z
+
+  grafana:
+    image: docker.io/grafana/grafana:11.5.2
+    restart: unless-stopped
+    depends_on:
+      - influxdb
+    ports:
+      - "${GRAFANA_BIND_IP:-127.0.0.1}:3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/hvac-secrets/grafana-password
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        export INFLUX_TOKEN="$$(cat /run/hvac-secrets/grafana-influx-token)"
+        exec /run.sh
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ../grafana/provisioning:/etc/grafana/provisioning:ro,Z
+      - ../grafana/dashboards:/var/lib/grafana/dashboards:ro,Z
+      - ../data/secrets/grafana-password:/run/hvac-secrets/grafana-password:ro,Z
+      - ../data/secrets/grafana-influx-token:/run/hvac-secrets/grafana-influx-token:ro,Z
+
+  esphome:
+    image: ghcr.io/esphome/esphome:2025.10.3
+    profiles: ["tools"]
+    volumes:
+      - ../esphome:/config:Z
+    working_dir: /config
+    command: version
+
+volumes:
+  mosquitto-data:
+  influx-data:
+  influx-config:
+  nodered-data:
+  grafana-data:

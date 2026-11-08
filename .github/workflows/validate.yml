@@ -1,0 +1,120 @@
+name: Validate
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  documentation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - name: Validate local links and fences
+        run: python3 scripts/check_docs.py
+      - name: Lint Markdown
+        run: npx --yes markdownlint-cli2@0.18.1 "**/*.md" "#node_modules"
+      - name: Render architecture diagram
+        run: |
+          sed -n '/^```mermaid/,/^```/p' docs/architecture.md | sed '1d;$d' > /tmp/architecture.mmd
+          printf '%s\n' '{"args":["--no-sandbox","--disable-setuid-sandbox"]}' > /tmp/puppeteer-config.json
+          npx --yes @mermaid-js/mermaid-cli@11.4.2 -p /tmp/puppeteer-config.json -i /tmp/architecture.mmd -o /tmp/architecture.svg
+
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - run: python3 -m unittest discover -s tests -p 'test_*.py' -v
+      - run: node tests/test_controller.js
+
+  stack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - name: Prepare disposable test credentials
+        run: |
+          mkdir -p data/secrets
+          printf 'admin\n' > data/secrets/influx-user
+          for name in influx-password influx-admin-token mqtt-password grafana-password nodered-credential-secret; do
+            openssl rand -hex 32 > "data/secrets/$name"
+          done
+          cp data/secrets/influx-admin-token data/secrets/nodered-influx-token
+          cp data/secrets/influx-admin-token data/secrets/grafana-influx-token
+          touch data/secrets/mosquitto.passwd
+          { cat data/secrets/mqtt-password; cat data/secrets/mqtt-password; } | \
+            docker run --rm -i -v "$PWD/data/secrets:/secrets" --entrypoint mosquitto_passwd \
+              eclipse-mosquitto:2.0.21 -c /secrets/mosquitto.passwd hvac
+          docker run --rm -v "$PWD/data/secrets:/secrets:ro" --entrypoint node nodered/node-red:4.0.9 \
+            -e "console.log(require('bcryptjs').hashSync(require('fs').readFileSync('/secrets/grafana-password','utf8').trim(), 8))" > data/secrets/nodered-admin-hash
+          chmod 644 data/secrets/*
+      - name: Validate compose and start
+        run: |
+          docker compose -f infrastructure/compose.yml config -q
+          docker compose -f infrastructure/compose.yml -f infrastructure/compose.dev.yml config -q
+          docker compose -f infrastructure/compose.yml up -d
+          docker compose -f infrastructure/compose.yml --profile tools run --rm esphome version
+      - name: Verify local services
+        run: |
+          for url in http://127.0.0.1:8086/health http://127.0.0.1:3000/api/health http://127.0.0.1:1880/; do
+            for attempt in $(seq 1 60); do
+              if curl --silent --fail "$url" > /dev/null; then break; fi
+              if [ "$attempt" = 60 ]; then echo "Service unavailable: $url"; exit 1; fi
+              sleep 2
+            done
+          done
+          for attempt in $(seq 1 30); do
+            if ! docker compose -f infrastructure/compose.yml exec -T mosquitto \
+              mosquitto_pub -h localhost -u hvac -P "$(cat data/secrets/mqtt-password)" -t hvac/roof/temp_out -m 24.5; then
+              sleep 2
+              continue
+            fi
+            sleep 2
+            if docker compose -f infrastructure/compose.yml exec -T influxdb \
+              influx query --org hvac --token "$(cat data/secrets/influx-admin-token)" \
+              'from(bucket: "hvac") |> range(start: -5m) |> filter(fn: (r) => r._measurement == "hvac" and r._field == "roof_out") |> last()' \
+              | grep -q '24.5'; then exit 0; fi
+          done
+          echo "MQTT observation was not stored in InfluxDB"
+          exit 1
+      - name: Show logs on failure
+        if: failure()
+        run: docker compose -f infrastructure/compose.yml logs --tail=100
+      - name: Stop stack
+        if: always()
+        run: docker compose -f infrastructure/compose.yml down -v
+
+  firmware:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: actions/setup-python@v5.6.0
+        with:
+          python-version: "3.12"
+      - name: Install ESPHome matching the Compose image
+        run: |
+          version=$(docker compose -f infrastructure/compose.yml --profile tools config --format json \
+            | python3 -c 'import json,sys; print(json.load(sys.stdin)["services"]["esphome"]["image"].rsplit(":", 1)[1])')
+          pip install "esphome==$version"
+      - name: Validate and compile nodes
+        run: |
+          cp esphome/secrets.example.yaml esphome/secrets.yaml
+          for config in esphome/roof.yaml esphome/mechanical.yaml esphome/expansion.yaml; do
+            esphome config "$config"
+            esphome compile "$config"
+          done
+      - name: Collect OTA and factory images
+        run: |
+          mkdir -p /tmp/firmware
+          for node in thermal-roof thermal-mechanical thermal-expansion; do
+            dir="esphome/.esphome/build/$node/.pioenvs/$node"
+            mkdir -p "/tmp/firmware/$node"
+            cp "$dir/firmware.bin" "/tmp/firmware/$node/firmware.bin"
+            cp "$dir/firmware.factory.bin" "/tmp/firmware/$node/factory.bin"
+          done
+      - uses: actions/upload-artifact@v4.6.2
+        with:
+          name: esp32-firmware-examples
+          path: /tmp/firmware/
+          if-no-files-found: error

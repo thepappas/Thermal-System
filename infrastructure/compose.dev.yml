@@ -1,0 +1,14 @@
+services:
+  # Development still requires authentication and binds only to loopback.
+  mosquitto:
+    ports: !override
+      - "127.0.0.1:1883:1883"
+  influxdb:
+    ports: !override
+      - "127.0.0.1:8086:8086"
+  nodered:
+    ports: !override
+      - "127.0.0.1:1880:1880"
+  grafana:
+    ports: !override
+      - "127.0.0.1:3000:3000"

@@ -1,0 +1,68 @@
+substitutions:
+  # Illustrative ROMs only: replace with the addresses of the installed sensors.
+  roof_in_rom: "0x2900000000000128"
+  roof_out_rom: "0x7000000000000228"
+  outdoor_rom: "0x4700000000000328"
+
+esphome:
+  name: thermal-roof
+  min_version: 2025.10.3
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+logger:
+
+ota:
+  - platform: esphome
+    password: !secret roof_ota_password
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+mqtt:
+  broker: !secret mqtt_broker
+  username: !secret roof_mqtt_username
+  password: !secret roof_mqtt_password
+  discovery: false
+  log_topic: null
+  topic_prefix: hvac/node/roof
+  birth_message:
+    topic: hvac/status/roof
+    payload: online
+    retain: true
+  will_message:
+    topic: hvac/status/roof
+    payload: offline
+    retain: true
+  shutdown_message:
+    topic: hvac/status/roof
+    payload: offline
+    retain: true
+
+one_wire:
+  - platform: gpio
+    pin: GPIO4
+
+sensor:
+  - platform: dallas_temp
+    address: ${roof_in_rom}
+    name: Roof inlet temperature
+    state_topic: hvac/roof/temp_in
+    retain: false
+    update_interval: 30s
+  - platform: dallas_temp
+    address: ${roof_out_rom}
+    name: Roof outlet temperature
+    state_topic: hvac/roof/temp_out
+    retain: false
+    update_interval: 30s
+  - platform: dallas_temp
+    address: ${outdoor_rom}
+    name: Outdoor temperature
+    state_topic: hvac/outdoor/temp
+    retain: false
+    update_interval: 30s
