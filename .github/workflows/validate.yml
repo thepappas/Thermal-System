@@ -11,7 +11,7 @@ jobs:
   documentation:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4.2.2
+      - uses: actions/checkout@v7.0.1
       - name: Validate local links and fences
         run: python3 scripts/check_docs.py
       - name: Lint Markdown
@@ -25,14 +25,14 @@ jobs:
   unit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4.2.2
+      - uses: actions/checkout@v7.0.1
       - run: python3 -m unittest discover -s tests -p 'test_*.py' -v
       - run: node tests/test_controller.js
 
   stack:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4.2.2
+      - uses: actions/checkout@v7.0.1
       - name: Prepare disposable test credentials
         run: |
           mkdir -p data/secrets
@@ -88,8 +88,8 @@ jobs:
   firmware:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4.2.2
-      - uses: actions/setup-python@v5.6.0
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: "3.12"
       - name: Install ESPHome matching the Compose image
@@ -113,7 +113,7 @@ jobs:
             cp "$dir/firmware.bin" "/tmp/firmware/$node/firmware.bin"
             cp "$dir/firmware.factory.bin" "/tmp/firmware/$node/factory.bin"
           done
-      - uses: actions/upload-artifact@v4.6.2
+      - uses: actions/upload-artifact@v7.0.2
         with:
           name: esp32-firmware-examples
           path: /tmp/firmware/
