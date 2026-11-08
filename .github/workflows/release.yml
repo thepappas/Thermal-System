@@ -1,0 +1,54 @@
+name: Prepare release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    uses: ./.github/workflows/validate.yml
+
+  release:
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Build release bundle
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_COMMIT: ${{ github.sha }}
+        run: |
+          python3 scripts/package_release.py "$RELEASE_TAG" "$RELEASE_COMMIT" dist
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_COMMIT: ${{ github.sha }}
+        run: |
+          set -eu
+          # A moved tag must not produce a bundle for a different commit.
+          remote_commit=$(git ls-remote origin "refs/tags/$RELEASE_TAG" "refs/tags/$RELEASE_TAG^{}" |
+            awk '/\^\{\}$/ { peeled = $1 } !/\^\{\}$/ { tag = $1 } END { print peeled ? peeled : tag }')
+          if [ "$remote_commit" != "$RELEASE_COMMIT" ]; then
+            echo "Release tag is missing or no longer points to the validated commit" >&2
+            exit 1
+          fi
+          prerelease=
+          case "${RELEASE_TAG%%+*}" in
+            *-*) prerelease=--prerelease ;;
+          esac
+          gh release create "$RELEASE_TAG" dist/* \
+            --verify-tag --draft --generate-notes $prerelease \
+            --notes-file .github/release-notes-header.md
