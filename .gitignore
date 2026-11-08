@@ -1,0 +1,9 @@
+.env
+secrets.yaml
+*.key
+*.pem
+*.bin
+__pycache__/
+.esphome/
+data/
+backups/
