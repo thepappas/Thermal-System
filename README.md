@@ -53,3 +53,6 @@ publishes synthetic readings on the real HVAC topic names. **Never point it at
 the production broker**: its data is indistinguishable from live observations.
 Set `MQTT_USER` and `MQTT_PASSWORD` in the environment when authentication is
 required. See [Node-RED](nodered/README.md) for the advisory state machine.
+
+Release bundles and the process for preparing them are described in
+[releases](docs/releases.md).
