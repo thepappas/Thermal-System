@@ -17,3 +17,5 @@ updates:
       container-images:
         patterns:
           - "*"
+
+# Versions used directly by npx in the workflow are not tracked by Dependabot.

@@ -92,7 +92,11 @@ jobs:
       - uses: actions/setup-python@v5.6.0
         with:
           python-version: "3.12"
-      - run: pip install esphome==2025.10.3
+      - name: Install ESPHome matching the Compose image
+        run: |
+          version=$(docker compose -f infrastructure/compose.yml --profile tools config --format json \
+            | python3 -c 'import json,sys; print(json.load(sys.stdin)["services"]["esphome"]["image"].rsplit(":", 1)[1])')
+          pip install "esphome==$version"
       - name: Validate and compile nodes
         run: |
           cp esphome/secrets.example.yaml esphome/secrets.yaml
