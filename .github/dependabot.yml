@@ -9,13 +9,4 @@ updates:
         patterns:
           - "*"
 
-  - package-ecosystem: docker
-    directory: /infrastructure
-    schedule:
-      interval: weekly
-    groups:
-      container-images:
-        patterns:
-          - "*"
-
 # Versions used directly by npx in the workflow are not tracked by Dependabot.
