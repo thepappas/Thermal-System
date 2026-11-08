@@ -12,7 +12,7 @@ The core is one uniform, effective thermal mass with constant heat capacity
 `C = mass_kg * specific_heat_j_kg_k` (J/K). Over each step, inlet and ambient
 temperatures, air mass flow, heat input, and properties are constant:
 
-```
+```text
 C dT/dt = m_dot * cp_air * (T_in - T) - UA * (T - T_ambient) + Q
 ```
 

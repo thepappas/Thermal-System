@@ -41,6 +41,7 @@ jobs:
           done
           cp data/secrets/influx-admin-token data/secrets/nodered-influx-token
           cp data/secrets/influx-admin-token data/secrets/grafana-influx-token
+          touch data/secrets/mosquitto.passwd
           { cat data/secrets/mqtt-password; cat data/secrets/mqtt-password; } | \
             docker run --rm -i -v "$PWD/data/secrets:/secrets" --entrypoint mosquitto_passwd \
               eclipse-mosquitto:2.0.21 -c /secrets/mosquitto.passwd hvac
@@ -95,7 +96,7 @@ jobs:
         run: |
           cp esphome/secrets.example.yaml esphome/secrets.yaml
           for config in esphome/roof.yaml esphome/mechanical.yaml esphome/expansion.yaml; do
-            esphome config "$config" > /dev/null
+            esphome config "$config"
             esphome compile "$config"
           done
       - name: Collect OTA and factory images
