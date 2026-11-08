@@ -19,7 +19,8 @@ jobs:
       - name: Render architecture diagram
         run: |
           sed -n '/^```mermaid/,/^```/p' docs/architecture.md | sed '1d;$d' > /tmp/architecture.mmd
-          npx --yes @mermaid-js/mermaid-cli@11.4.2 -i /tmp/architecture.mmd -o /tmp/architecture.svg
+          printf '%s\n' '{"args":["--no-sandbox","--disable-setuid-sandbox"]}' > /tmp/puppeteer-config.json
+          npx --yes @mermaid-js/mermaid-cli@11.4.2 -p /tmp/puppeteer-config.json -i /tmp/architecture.mmd -o /tmp/architecture.svg
 
   unit:
     runs-on: ubuntu-latest
